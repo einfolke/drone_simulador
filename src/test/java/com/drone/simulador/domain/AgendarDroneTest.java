@@ -1,6 +1,6 @@
-﻿package com.drone.simulador.domain;
+package com.drone.simulador.domain;
 
-import static junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -36,6 +36,38 @@ class AgendarDroneTest {
             assertTrue(!rota.isEmpty() && rota.get(rota.size() - 1).equals(Partida.DEPOSITO), "rota deve finalizar no deposito");
             assertTrue(viagem.getTempoHoras() >= 0, "tempo precisa ser calculado");
         });
+    }
+
+    @Test
+    @DisplayName("planejar combina pedidos maximizando capacidade e autonomia do drone")
+    void planejarCombinaPedidosParaMaximizarUsoDoDrone() {
+        var agendador = new AgendarDrone();
+        var drone = new Drone("D1", 9.0, 3.0); // alcance maximo = 27 km
+        var drones = List.of(drone);
+
+        var altaProxima = new Pedido(new Partida(4, 0), 3.0, Prioridade.ALTA);
+        var altaDistante = new Pedido(new Partida(14, 0), 3.0, Prioridade.ALTA);
+        var mediaProxima = new Pedido(new Partida(5, 0), 3.0, Prioridade.MEDIA);
+        var baixaProxima = new Pedido(new Partida(6, 0), 3.0, Prioridade.BAIXA);
+
+        var pedidos = new ArrayList<>(List.of(altaProxima, altaDistante, mediaProxima, baixaProxima));
+
+        var viagens = agendador.planejar(drones, pedidos);
+
+        assertEquals(2, viagens.size(), "espera duas viagens otimizadas");
+
+        var primeiraViagem = viagens.get(0);
+        assertEquals(3, primeiraViagem.getPedidos().size(), "primeira viagem deve agrupar tres pedidos proximos");
+        assertTrue(primeiraViagem.getPedidos().contains(altaProxima));
+        assertTrue(primeiraViagem.getPedidos().contains(mediaProxima));
+        assertTrue(primeiraViagem.getPedidos().contains(baixaProxima));
+        assertTrue(!primeiraViagem.getPedidos().contains(altaDistante));
+        assertEquals(drone.getCapacidadePorPeso(), primeiraViagem.getPesoTotalKg(), 1e-6);
+        assertTrue(primeiraViagem.getDistanciaKm() <= drone.getDistanciaPorCarga() + 1e-6);
+
+        var segundaViagem = viagens.get(1);
+        assertEquals(1, segundaViagem.getPedidos().size(), "pedido distante deve ser tratado em viagem isolada");
+        assertTrue(segundaViagem.getPedidos().contains(altaDistante));
     }
 
     @Test
