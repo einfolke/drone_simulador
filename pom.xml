@@ -1,46 +1,52 @@
-﻿<project xmlns="http://maven.apache.org/POM/4.0.0"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.drone</groupId>
+  <groupId>com.drone.simulador</groupId>
   <artifactId>drone-simulador</artifactId>
   <version>1.0.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
   <name>Drone Simulador</name>
   <description>Simulador de rotas e agendamento de drones</description>
 
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <junit.jupiter.version>5.10.3</junit.jupiter.version>
+    <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
   </properties>
 
-<dependencies>
-  <dependency>
-    <groupId>com.fasterxml.jackson.core</groupId>
-    <artifactId>jackson-databind</artifactId>
-    <version>2.17.2</version>
-  </dependency>
-  <!-- Driver PostgreSQL -->
-  <dependency>
-    <groupId>org.postgresql</groupId>
-    <artifactId>postgresql</artifactId>
-    <version>42.7.4</version>
-  </dependency>
+  <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.17.2</version>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <version>42.7.4</version>
+    </dependency>
+    <dependency>
+      <groupId>com.zaxxer</groupId>
+      <artifactId>HikariCP</artifactId>
+      <version>5.1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+      <version>10.17.0</version>
+    </dependency>
 
-  <!-- HikariCP (pool de conexÃµes) -->
-  <dependency>
-    <groupId>com.zaxxer</groupId>
-    <artifactId>HikariCP</artifactId>
-    <version>5.1.0</version>
-  </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.jupiter.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
 
-  <!-- Flyway para migraÃ§Ãµes (opcional porÃ©m recomendado) -->
-  <dependency>
-    <groupId>org.flywaydb</groupId>
-    <artifactId>flyway-core</artifactId>
-    <version>10.17.0</version>
-  </dependency>
-</dependencies>
   <build>
     <plugins>
       <plugin>
@@ -49,6 +55,14 @@
         <version>3.13.0</version>
         <configuration>
           <release>${maven.compiler.release}</release>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>${maven-surefire-plugin.version}</version>
+        <configuration>
+          <useModulePath>false</useModulePath>
         </configuration>
       </plugin>
       <plugin>
@@ -74,26 +88,20 @@
           </execution>
         </executions>
       </plugin>
-    <plugin>
-      <groupId>org.flywaydb</groupId>
-      <artifactId>flyway-maven-plugin</artifactId>
-      <version>10.17.0</version>
-      <configuration>
-        <!-- Lê variáveis de ambiente definidas no .env (Docker/host) -->
-        <url>${env.JDBC_URL}</url>
-        <user>${env.JDBC_USER}</user>
-        <password>${env.JDBC_PASSWORD}</password>
-        <locations>
-          <!-- Se usar migrações empacotadas no JAR -->
-          <location>classpath:db/migration</location>
-          <!-- OU, se preferir usar os .sql da raiz durante o build: -->
-          <!-- <location>filesystem:${project.basedir}/db/migration</location> -->
-        </locations>
-        <baselineOnMigrate>true</baselineOnMigrate>
-      </configuration>
-    </plugin>
-    </plugins> 
+      <plugin>
+        <groupId>org.flywaydb</groupId>
+        <artifactId>flyway-maven-plugin</artifactId>
+        <version>10.17.0</version>
+        <configuration>
+          <url>${env.JDBC_URL}</url>
+          <user>${env.JDBC_USER}</user>
+          <password>${env.JDBC_PASSWORD}</password>
+          <locations>
+            <location>classpath:db/migration</location>
+          </locations>
+          <baselineOnMigrate>true</baselineOnMigrate>
+        </configuration>
+      </plugin>
+    </plugins>
   </build>
 </project>
-
-
