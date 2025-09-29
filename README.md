@@ -21,11 +21,16 @@ Além das opções básicas de cadastro e simulação de rotas, o projeto conta 
 
 - Otimização Inteligente – as rotas são calculadas considerando peso da carga, prioridade da entrega e distância, equilibrando eficiência e segurança.
 
-## Por que React com Vite?
+## Motivação da escolha React + Vite
 
-Optei por React pela sua flexibilidade, vasta comunidade e ecossistema maduro, que facilitam a criação de componentes reutilizáveis e uma interface dinâmica.
-Já o Vite foi escolhido por oferecer build ultra-rápido, hot reload instantâneo e uma configuração mais enxuta em comparação ao Create React App, acelerando tanto o desenvolvimento local quanto o processo de produção.
-Essa combinação garante desempenho, produtividade e uma experiência de desenvolvimento moderna.
+A combinação React + Vite foi adotada porque:
+
+React oferece flexibilidade na construção de interfaces dinâmicas com componentes reutilizáveis.
+
+Vite fornece build extremamente rápido, recarregamento instantâneo (HMR) e uma configuração leve.
+
+Juntas, essas tecnologias aumentam a produtividade de desenvolvimento e melhoram a experiência de prototipação rápida.
+
 ## ⚡ Tecnologias
 | Camada | Tecnologia |
 |--------|------------|
@@ -89,10 +94,14 @@ mvn flyway:migrate
   npm install
   npm run dev
   ```
-
-### 5️⃣ Frontend
+## 5️⃣Banco de dados
+Execute os scripts SQL de inicialização
+```env
+psql -U postgres -d drone_simulador < schema.sql
+```
+### 6️⃣ Frontend
 ```bash
-cd react
+cd client
 npm install
 npm run dev
 ```
@@ -107,6 +116,7 @@ DB_USER=user
 DB_PASS=password
 DB_NAME=drones
 ```
+
 
 ## 🧪 Testes
 Node.js:
