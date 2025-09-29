@@ -1,4 +1,34 @@
-﻿import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  AppShell,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Container,
+  Divider,
+  Grid,
+  Group,
+  List,
+  Paper,
+  ScrollArea,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  ThemeIcon,
+  Title
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconDrone,
+  IconMap,
+  IconPlayerPlay,
+  IconRoute,
+  IconSparkles
+} from "@tabler/icons-react";
 
 const OBSTACLES = [
   { x: 5, y: 2, raio: 1.2, descricao: "Zona industrial" },
@@ -7,20 +37,23 @@ const OBSTACLES = [
 
 export default function App() {
   const canvasRef = useRef(null);
+  const payload = useMemo(
+    () => ({
+      drones: [{ id: "D1", capacidadeKg: 5, autonomiaKm: 20 }],
+      pedidos: [
+        { x: 3, y: 4, pesoKg: 2, prioridade: "ALTA" },
+        { x: 7, y: 1, pesoKg: 1, prioridade: "MEDIA" },
+        { x: 6, y: 6, pesoKg: 2.5, prioridade: "ALTA" }
+      ],
+      obstaculos: OBSTACLES
+    }),
+    []
+  );
+
   const [saida, setSaida] = useState(null);
   const [erro, setErro] = useState("");
   const [rotaAtual, setRotaAtual] = useState([]);
   const [tituloMapa, setTituloMapa] = useState("Mapa");
-
-  const payload = {
-    drones: [{ id: "D1", capacidadeKg: 5, autonomiaKm: 20 }],
-    pedidos: [
-      { x: 3, y: 4, pesoKg: 2, prioridade: "ALTA" },
-      { x: 7, y: 1, pesoKg: 1, prioridade: "MEDIA" },
-      { x: 6, y: 6, pesoKg: 2.5, prioridade: "ALTA" }
-    ],
-    obstaculos: OBSTACLES
-  };
 
   const desenharRota = (rota, titulo = "Rota", obstaculos = []) => {
     const cvs = canvasRef.current;
@@ -124,7 +157,7 @@ export default function App() {
 
   useEffect(() => {
     desenharRota(rotaAtual, tituloMapa, payload.obstaculos);
-  }, [rotaAtual, tituloMapa, payload.obstaculos]);
+  }, [rotaAtual, tituloMapa, payload]);
 
   const formatNumber = (value, decimals = 2) => {
     const num = Number(value);
@@ -137,6 +170,12 @@ export default function App() {
     setSaida(null);
     setTituloMapa("Rota (teste offline)");
     setRotaAtual(rotaFake);
+    notifications.show({
+      color: "indigo",
+      title: "Simulação offline",
+      message: "Rota de teste desenhada no mapa.",
+      icon: <IconSparkles size={18} />
+    });
   }
 
   async function planejarApi() {
@@ -156,176 +195,357 @@ export default function App() {
 
       setSaida(json);
       const viagensResp = Array.isArray(json?.viagens) ? json.viagens : [];
-      const primeiraRota = Array.isArray(viagensResp[0]?.rota)
-        ? viagensResp[0].rota
+      const primeiraRota = viagensResp.length
+        ? Array.isArray(viagensResp[0]?.rota)
+          ? viagensResp[0].rota
+          : []
         : Array.isArray(json?.rota)
-        ? json.rota
-        : [];
+          ? json.rota
+          : [];
 
       setTituloMapa(viagensResp.length > 0 ? "Rota (viagem 1)" : "Rota (API)");
-      setRotaAtual(Array.isArray(primeiraRota) ? primeiraRota : []);
+      setRotaAtual(primeiraRota);
+      notifications.show({
+        color: "green",
+        title: "Planejamento concluído",
+        message: "Dados recebidos da API com sucesso.",
+        icon: <IconDrone size={18} />
+      });
     } catch (e) {
       console.error(e);
       setSaida(null);
       setErro(e.message);
       setTituloMapa("Erro ao buscar rota");
       setRotaAtual([]);
+      notifications.show({
+        color: "red",
+        title: "Erro ao planejar",
+        message: e.message,
+        icon: <IconAlertCircle size={18} />
+      });
     }
   }
 
   const viagens = Array.isArray(saida?.viagens) ? saida.viagens : [];
-  const bateriaSolta = !viagens.length && saida?.bateria
-    ? [{
-        idDrone: saida?.idDrone ?? saida?.drone?.id,
-        rota: Array.isArray(saida?.rota) ? saida.rota : [],
-        distanciaKm: saida?.distanciaKm,
-        pesoTotalKg: saida?.pesoTotalKg,
-        tempoHoras: saida?.tempoHoras ?? saida?.bateria?.tempoTotalHoras,
-        bateria: saida.bateria
-      }]
-    : [];
+  const bateriaSolta =
+    !viagens.length && saida?.bateria
+      ? [
+          {
+            idDrone: saida?.idDrone ?? saida?.drone?.id,
+            rota: Array.isArray(saida?.rota) ? saida.rota : [],
+            distanciaKm: saida?.distanciaKm,
+            pesoTotalKg: saida?.pesoTotalKg,
+            tempoHoras: saida?.tempoHoras ?? saida?.bateria?.tempoTotalHoras,
+            bateria: saida.bateria
+          }
+        ]
+      : [];
   const viagensParaExibir = viagens.length ? viagens : bateriaSolta;
   const tempoEntregaTotal = viagensParaExibir.reduce(
-    (total, viagem) => total + (Number(viagem?.tempoHoras) || Number(viagem?.bateria?.tempoTotalHoras) || 0),
+    (total, viagem) =>
+      total + (Number(viagem?.tempoHoras) || Number(viagem?.bateria?.tempoTotalHoras) || 0),
     0
   );
 
+  const overviewCards = [
+    {
+      title: "Drones ativos",
+      value: payload.drones.length,
+      description: "Capacidade total " +
+        formatNumber(
+          payload.drones.reduce((acc, drone) => acc + Number(drone.capacidadeKg || 0), 0),
+          1
+        ) +
+        " kg",
+      color: "blue"
+    },
+    {
+      title: "Pedidos na fila",
+      value: payload.pedidos.length,
+      description: "Prioridade alta " +
+        payload.pedidos.filter((pedido) => pedido.prioridade === "ALTA").length,
+      color: "teal"
+    },
+    {
+      title: "Obstáculos mapeados",
+      value: payload.obstaculos.length,
+      description: "Inclui zonas sensíveis",
+      color: "orange"
+    }
+  ];
+
   return (
-    <div style={{ fontFamily: "system-ui", padding: 20 }}>
-      <h1>Planejamento de Drones</h1>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <button type="button" onClick={desenharTeste}>Desenhar teste (sem API)</button>
-        <button type="button" onClick={planejarApi}>Planejar (API)</button>
-      </div>
-      {erro && <p style={{ color: "red" }}>Erro: {erro}</p>}
+    <AppShell padding="lg">
+      <AppShell.Header>
+        <Container size="xl" py="sm">
+          <Group justify="space-between" align="flex-start">
+            <Stack gap={4}>
+              <Group gap="xs">
+                <ThemeIcon variant="light" color="blue" radius="md" size="lg">
+                  <IconDrone size={20} />
+                </ThemeIcon>
+                <Title order={2}>Planejamento de Drones</Title>
+              </Group>
+              <Text size="sm" c="dimmed">
+                Defina cargas, calcule rotas e visualize restrições do espaço aéreo em tempo real.
+              </Text>
+            </Stack>
+            <Group>
+              <Button variant="light" leftSection={<IconSparkles size={16} />} onClick={desenharTeste}>
+                Simular offline
+              </Button>
+              <Button leftSection={<IconPlayerPlay size={16} />} onClick={planejarApi}>
+                Planejar com API
+              </Button>
+            </Group>
+          </Group>
+        </Container>
+      </AppShell.Header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <pre style={{ background: "black", padding: 12, height: 280, overflow: "auto", color: "#0f0" }}>
-          Entrada:
-          {"\n"}
-          {JSON.stringify(payload, null, 2)}
-        </pre>
-        <pre style={{ background: "black", padding: 12, height: 280, overflow: "auto", color: "#0f0" }}>
-          Saida:
-          {"\n"}
-          {saida ? JSON.stringify(saida, null, 2) : "Sem resultado"}
-        </pre>
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <strong>Obstaculos configurados:</strong>
-        <ul>
-          {payload.obstaculos.map((obs, index) => (
-            <li key={`obs-${index}`}>
-              {obs.descricao ?? `Obstaculo ${index + 1}`} - Centro ({obs.x}, {obs.y}) | Raio {obs.raio}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {viagensParaExibir.length > 0 && (
-        <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
-          <h3>Viagens e simulacao de bateria</h3>
-          <p style={{ margin: "0 0 8px" }}>
-            Tempo total estimado de entrega: {formatNumber(tempoEntregaTotal)} h
-          </p>
-          {viagensParaExibir.map((viagem, index) => {
-            const bateria = viagem?.bateria;
-            const rota = Array.isArray(viagem?.rota) ? viagem.rota : [];
-            const tempoHoras = Number(viagem?.tempoHoras) || Number(bateria?.tempoTotalHoras);
-            return (
-              <div
-                key={`viagem-${index}`}
-                style={{
-                  border: "1px solid #ddd",
-                  borderRadius: 6,
-                  padding: 12,
-                  background: "#fdfdfd"
-                }}
+      <AppShell.Main>
+        <Container size="xl" py="xl">
+          <Stack gap="xl">
+            {erro && (
+              <Alert
+                variant="light"
+                color="red"
+                title="Erro ao consultar API"
+                icon={<IconAlertCircle size={18} />}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
-                    flexWrap: "wrap"
-                  }}
-                >
-                  <strong>
-                    Viagem {index + 1} - Drone {viagem?.idDrone ?? viagem?.drone?.id ?? "N/D"}
-                  </strong>
-                  {rota.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTituloMapa(`Rota (viagem ${index + 1})`);
-                        setRotaAtual(rota);
-                      }}
-                    >
-                      Ver rota no mapa
-                    </button>
-                  )}
-                </div>
-                <p style={{ margin: "8px 0 4px" }}>
-                  Peso total: {formatNumber(viagem?.pesoTotalKg)} kg | Distancia planejada: {formatNumber(viagem?.distanciaKm)} km | Tempo estimado: {formatNumber(tempoHoras)} h
-                </p>
-                {bateria ? (
-                  <>
-                    <p style={{ margin: "4px 0" }}>
-                      Distancia simulada: {formatNumber(bateria.distanciaTotalKm)} km | Tempo simulado: {formatNumber(bateria.tempoTotalHoras)} h | {bateria.rotaCompleta ? "Bateria suficiente" : "Bateria insuficiente"}
-                    </p>
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                        <thead>
-                          <tr style={{ background: "#ececec" }}>
-                            <th style={{ textAlign: "left", padding: "6px", borderBottom: "1px solid #ccc" }}>#</th>
-                            <th style={{ textAlign: "left", padding: "6px", borderBottom: "1px solid #ccc" }}>Dist. segmento (km)</th>
-                            <th style={{ textAlign: "left", padding: "6px", borderBottom: "1px solid #ccc" }}>Dist. acumulada (km)</th>
-                            <th style={{ textAlign: "left", padding: "6px", borderBottom: "1px solid #ccc" }}>Tempo segmento (h)</th>
-                            <th style={{ textAlign: "left", padding: "6px", borderBottom: "1px solid #ccc" }}>Tempo acumulado (h)</th>
-                            <th style={{ textAlign: "left", padding: "6px", borderBottom: "1px solid #ccc" }}>Bateria restante (%)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Array.isArray(bateria.passos) && bateria.passos.length > 0 ? (
-                            bateria.passos.map((passo, passoIndex) => (
-                              <tr key={`passo-${passoIndex}`}>
-                                <td style={{ padding: "6px", borderBottom: "1px solid #eee" }}>{passoIndex + 1}</td>
-                                <td style={{ padding: "6px", borderBottom: "1px solid #eee" }}>{formatNumber(passo?.distanciaSegmentoKm)}</td>
-                                <td style={{ padding: "6px", borderBottom: "1px solid #eee" }}>{formatNumber(passo?.distanciaAcumuladaKm)}</td>
-                                <td style={{ padding: "6px", borderBottom: "1px solid #eee" }}>{formatNumber(passo?.tempoSegmentoHoras)}</td>
-                                <td style={{ padding: "6px", borderBottom: "1px solid #eee" }}>{formatNumber(passo?.tempoAcumuladoHoras)}</td>
-                                <td style={{ padding: "6px", borderBottom: "1px solid #eee" }}>{formatNumber(passo?.cargaRestantePercentual)}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={6} style={{ padding: "6px", borderBottom: "1px solid #eee" }}>
-                                Nenhum passo de bateria informado.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
-                  <p style={{ marginTop: 8 }}>Simulacao de bateria nao disponivel para esta viagem.</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                {erro}
+              </Alert>
+            )}
 
-      <h3 style={{ marginTop: 16 }}>{tituloMapa}</h3>
-      <canvas
-        ref={canvasRef}
-        width={600}
-        height={500}
-        style={{ border: "1px solid #ddd", background: "white" }}
-      />
-    </div>
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+              {overviewCards.map((card) => (
+                <Card key={card.title} withBorder radius="md" shadow="sm">
+                  <Stack gap="xs">
+                    <Text size="xs" c="dimmed">
+                      {card.title}
+                    </Text>
+                    <Title order={3}>{card.value}</Title>
+                    <Text size="sm" c="dimmed">
+                      {card.description}
+                    </Text>
+                    <Divider my="xs" />
+                    <Badge color={card.color} variant="light" radius="sm">
+                      Atualizado automaticamente
+                    </Badge>
+                  </Stack>
+                </Card>
+              ))}
+            </SimpleGrid>
+
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <Card withBorder radius="md" shadow="sm">
+                  <Group justify="space-between" mb="sm">
+                    <Title order={4}>Payload de entrada</Title>
+                    <Badge color="gray" variant="light">
+                      JSON
+                    </Badge>
+                  </Group>
+                  <ScrollArea h={260} type="auto">
+                    <Paper
+                      radius="sm"
+                      p="sm"
+                      withBorder
+                      bg="dark.9"
+                      c="green.4"
+                      style={{ fontFamily: "monospace", fontSize: 12 }}
+                      component="pre"
+                    >
+                      {JSON.stringify(payload, null, 2)}
+                    </Paper>
+                  </ScrollArea>
+                </Card>
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <Card withBorder radius="md" shadow="sm">
+                  <Group justify="space-between" mb="sm">
+                    <Title order={4}>Retorno da API</Title>
+                    <Badge color="green" variant="light">
+                      Em tempo real
+                    </Badge>
+                  </Group>
+                  <ScrollArea h={260} type="auto">
+                    <Paper
+                      radius="sm"
+                      p="sm"
+                      withBorder
+                      bg="dark.9"
+                      c="green.4"
+                      style={{ fontFamily: "monospace", fontSize: 12 }}
+                      component="pre"
+                    >
+                      {saida ? JSON.stringify(saida, null, 2) : "Sem resultado"}
+                    </Paper>
+                  </ScrollArea>
+                </Card>
+              </Grid.Col>
+            </Grid>
+
+            <Card withBorder radius="md" shadow="sm">
+              <Group justify="space-between" mb="md">
+                <Group gap="xs">
+                  <ThemeIcon color="orange" variant="light">
+                    <IconAlertCircle size={18} />
+                  </ThemeIcon>
+                  <Title order={4}>Obstáculos configurados</Title>
+                </Group>
+                <Badge color="orange" variant="light">
+                  {payload.obstaculos.length} zonas
+                </Badge>
+              </Group>
+              <List spacing="xs" size="sm">
+                {payload.obstaculos.map((obs, index) => (
+                  <List.Item
+                    key={`obs-${index}`}
+                    icon={
+                      <ThemeIcon size={24} radius="xl" color="orange" variant="light">
+                        <IconMap size={16} />
+                      </ThemeIcon>
+                    }
+                  >
+                    <Text fw={500}>{obs.descricao ?? `Obstáculo ${index + 1}`}</Text>
+                    <Text size="sm" c="dimmed">
+                      Centro ({obs.x}, {obs.y}) · Raio {obs.raio} km
+                    </Text>
+                  </List.Item>
+                ))}
+              </List>
+            </Card>
+
+            {viagensParaExibir.length > 0 && (
+              <Card withBorder radius="md" shadow="sm">
+                <Stack gap="md">
+                  <Group justify="space-between" align="center">
+                    <Title order={3}>Viagens e simulação de bateria</Title>
+                    <Text size="sm" c="dimmed">
+                      Tempo total estimado de entrega: {formatNumber(tempoEntregaTotal)} h
+                    </Text>
+                  </Group>
+                  <Divider />
+                  <Stack gap="md">
+                    {viagensParaExibir.map((viagem, index) => {
+                      const bateria = viagem?.bateria;
+                      const rota = Array.isArray(viagem?.rota) ? viagem.rota : [];
+                      const tempoHoras =
+                        Number(viagem?.tempoHoras) || Number(bateria?.tempoTotalHoras);
+                      const bateriaOk = bateria ? bateria.rotaCompleta : false;
+
+                      return (
+                        <Card key={`viagem-${index}`} withBorder padding="md" radius="md" shadow="xs">
+                          <Stack gap="sm">
+                            <Group justify="space-between" align="flex-start">
+                              <Stack gap={4}>
+                                <Group gap="xs">
+                                  <Badge color="blue" variant="light">
+                                    Viagem {index + 1}
+                                  </Badge>
+                                  <Badge color="indigo" variant="light">
+                                    Drone {viagem?.idDrone ?? viagem?.drone?.id ?? "N/D"}
+                                  </Badge>
+                                  <Badge color={bateriaOk ? "green" : "red"} variant="light">
+                                    {bateriaOk ? "Bateria suficiente" : "Bateria insuficiente"}
+                                  </Badge>
+                                </Group>
+                                <Text size="sm" c="dimmed">
+                                  Peso total {formatNumber(viagem?.pesoTotalKg)} kg · Distância {" "}
+                                  {formatNumber(viagem?.distanciaKm)} km · Tempo estimado {formatNumber(tempoHoras)} h
+                                </Text>
+                              </Stack>
+                              {rota.length > 0 && (
+                                <Button
+                                  variant="light"
+                                  size="xs"
+                                  leftSection={<IconRoute size={14} />}
+                                  onClick={() => {
+                                    setTituloMapa(`Rota (viagem ${index + 1})`);
+                                    setRotaAtual(rota);
+                                  }}
+                                >
+                                  Ver rota no mapa
+                                </Button>
+                              )}
+                            </Group>
+
+                            {bateria ? (
+                              <Stack gap="xs">
+                                <Text size="sm" fw={500}>
+                                  Simulação de bateria
+                                </Text>
+                                <ScrollArea h={200} type="auto">
+                                  <Table highlightOnHover withRowBorders>
+                                    <Table.Thead>
+                                      <Table.Tr>
+                                        <Table.Th>#</Table.Th>
+                                        <Table.Th>Dist. segmento (km)</Table.Th>
+                                        <Table.Th>Dist. acumulada (km)</Table.Th>
+                                        <Table.Th>Tempo segmento (h)</Table.Th>
+                                        <Table.Th>Tempo acumulado (h)</Table.Th>
+                                        <Table.Th>Bateria restante (%)</Table.Th>
+                                      </Table.Tr>
+                                    </Table.Thead>
+                                    <Table.Tbody>
+                                      {Array.isArray(bateria.passos) && bateria.passos.length > 0 ? (
+                                        bateria.passos.map((passo, passoIndex) => (
+                                          <Table.Tr key={`passo-${passoIndex}`}>
+                                            <Table.Td>{passoIndex + 1}</Table.Td>
+                                            <Table.Td>{formatNumber(passo?.distanciaSegmentoKm)}</Table.Td>
+                                            <Table.Td>{formatNumber(passo?.distanciaAcumuladaKm)}</Table.Td>
+                                            <Table.Td>{formatNumber(passo?.tempoSegmentoHoras)}</Table.Td>
+                                            <Table.Td>{formatNumber(passo?.tempoAcumuladoHoras)}</Table.Td>
+                                            <Table.Td>{formatNumber(passo?.cargaRestantePercentual)}</Table.Td>
+                                          </Table.Tr>
+                                        ))
+                                      ) : (
+                                        <Table.Tr>
+                                          <Table.Td colSpan={6}>
+                                            Nenhum passo de bateria informado.
+                                          </Table.Td>
+                                        </Table.Tr>
+                                      )}
+                                    </Table.Tbody>
+                                  </Table>
+                                </ScrollArea>
+                              </Stack>
+                            ) : (
+                              <Alert variant="light" color="yellow" icon={<IconAlertCircle size={16} />}>
+                                Simulação de bateria não disponível para esta viagem.
+                              </Alert>
+                            )}
+                          </Stack>
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                </Stack>
+              </Card>
+            )}
+
+            <Card withBorder radius="md" shadow="sm">
+              <Group justify="space-between" mb="sm">
+                <Title order={3}>{tituloMapa}</Title>
+                <Badge variant="light" color="gray">
+                  Visualização de rota
+                </Badge>
+              </Group>
+              <Paper withBorder radius="md" p="sm">
+                <Box
+                  component="canvas"
+                  ref={canvasRef}
+                  width={600}
+                  height={500}
+                  style={{ width: "100%", maxWidth: "100%", borderRadius: 8, background: "white" }}
+                />
+              </Paper>
+            </Card>
+          </Stack>
+        </Container>
+      </AppShell.Main>
+    </AppShell>
   );
 }
+
+

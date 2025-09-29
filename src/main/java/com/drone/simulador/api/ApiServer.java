@@ -1,0 +1,69 @@
+﻿package com.drone.simulador.api;
+
+import com.drone.simulador.infra.DatabaseConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import javax.sql.DataSource;
+
+public final class ApiServer implements AutoCloseable {
+
+    private final HttpServer httpServer;
+    private final ObjectMapper mapper;
+    private final ExecutorService executor;
+    private final DataSource dataSource;
+
+    public ApiServer(int port) throws IOException {
+        this.mapper = buildMapper();
+        this.dataSource = DatabaseConfig.getDataSource();
+        this.httpServer = HttpServer.create(new InetSocketAddress(port), 0);
+        this.executor = Executors.newCachedThreadPool();
+        this.httpServer.createContext("/health", exchange -> {
+            try (exchange) {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    exchange.sendResponseHeaders(405, -1);
+                    return;
+                }
+                byte[] payload = "{\"status\":\"ok\"}".getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+                exchange.sendResponseHeaders(200, payload.length);
+                try (var responseBody = exchange.getResponseBody()) {
+                    responseBody.write(payload);
+                }
+            }
+        });
+        this.httpServer.createContext("/api/planejar", new PlanejamentoController(mapper, dataSource));
+        this.httpServer.setExecutor(executor);
+    }
+
+    private ObjectMapper buildMapper() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        return objectMapper;
+    }
+
+    public void start() {
+        this.httpServer.start();
+    }
+
+    public void stop(int delaySeconds) {
+        this.httpServer.stop(delaySeconds);
+        executor.shutdownNow();
+    }
+
+    @Override
+    public void close() {
+        stop(0);
+    }
+
+    public ObjectMapper mapper() {
+        return mapper;
+    }
+}

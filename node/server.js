@@ -1,14 +1,38 @@
-﻿require('dotenv').config();
-
-const express = require('express');
+﻿const express = require('express');
 const cors = require('cors');
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
 const dronesDao = require('./dao/dronesDao');
 const entregasDao = require('./dao/entregasDao');
 const { simulateBattery } = require('./utils/batterySimulator');
 const { aplicarObstaculos } = require('./utils/obstacles');
+
+const JAVA_API_URL = (process.env.JAVA_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+const JAVA_API_ENABLED = String(process.env.JAVA_API_ENABLED || 'true').toLowerCase() === 'true';
+
+function buildStubResponse(body = {}) {
+  const { drones = [], pedidos = [], obstaculos = [] } = body;
+  const baseRota = [[0, 0], ...pedidos.map((p) => [Number(p.x) || 0, Number(p.y) || 0]), [0, 0]];
+  const rota = aplicarObstaculos(baseRota, obstaculos);
+  const principalDrone = drones[0] || {};
+  const simulacaoBateria = simulateBattery(principalDrone, rota);
+  const pesoTotal = pedidos.reduce((soma, pedido) => soma + (Number(pedido.pesoKg) || 0), 0);
+
+  return {
+    origem: 'stub',
+    recebido: { drones, pedidos, obstaculos },
+    tempoTotalEntregaHoras: simulacaoBateria.tempoTotalHoras,
+    viagens: [
+      {
+        idDrone: principalDrone.id ?? principalDrone.identificador ?? 'DX',
+        pesoTotalKg: pesoTotal,
+        distanciaKm: simulacaoBateria.distanciaTotalKm,
+        tempoHoras: simulacaoBateria.tempoTotalHoras,
+        idsPedidos: pedidos.map((_, index) => index + 1),
+        rota,
+        bateria: simulacaoBateria
+      }
+    ]
+  };
+}
 
 const app = express();
 app.use(cors());
@@ -99,79 +123,42 @@ app.post('/api/entregas', async (req, res) => {
   }
 });
 
-const JAR_PATH = path.resolve(__dirname, '../java/target/SEU-ARTEFATO-jar-with-dependencies.jar');
+app.post('/api/planejar', async (req, res) => {
+  const payload = req.body ?? {};
+  const useStubOnly = !JAVA_API_ENABLED;
 
-app.post('/api/planejar', (req, res) => {
-  console.log('POST /api/planejar recebido');
-
-  if (!fs.existsSync(JAR_PATH)) {
-    console.warn('JAR nao encontrado em:', JAR_PATH, ' - retornando STUB para teste.');
-    const { drones = [], pedidos = [], obstaculos = [] } = req.body || {};
-    const baseRota = [[0, 0], ...(pedidos.map(p => [Number(p.x) || 0, Number(p.y) || 0])), [0, 0]];
-    const rota = aplicarObstaculos(baseRota, obstaculos);
-    const principalDrone = drones[0] || {};
-    const simulacaoBateria = simulateBattery(principalDrone, rota);
-    const pesoTotal = pedidos.reduce((s, p) => s + (Number(p.pesoKg) || 0), 0);
-    const viagemStub = {
-      idDrone: principalDrone.id ?? 'DX',
-      pesoTotalKg: pesoTotal,
-      distanciaKm: simulacaoBateria.distanciaTotalKm,
-      tempoHoras: simulacaoBateria.tempoTotalHoras,
-      idsPedidos: pedidos.map((_, i) => i + 1),
-      rota,
-      bateria: simulacaoBateria
-    };
-    return res.json({
-      origem: 'stub',
-      recebido: { drones, pedidos, obstaculos },
-      tempoTotalEntregaHoras: simulacaoBateria.tempoTotalHoras,
-      viagens: [viagemStub]
-    });
+  if (useStubOnly) {
+    return res.json(buildStubResponse(payload));
   }
 
-  const child = spawn('java', ['-jar', JAR_PATH], { stdio: ['pipe', 'pipe', 'pipe'] });
-  child.stdin.write(JSON.stringify(req.body));
-  child.stdin.end();
+  try {
+    const response = await fetch(`${JAVA_API_URL}/api/planejar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-  let out = '';
-  let err = '';
-  child.stdout.on('data', (chunk) => { out += chunk.toString(); });
-  child.stderr.on('data', (chunk) => { err += chunk.toString(); });
-  child.on('close', (code) => {
-    if (code !== 0) {
-      console.error('Java stderr:', err);
-      return res.status(500).json({ erro: 'Falha ao executar Java', detalhes: err });
-    }
+    const raw = await response.text();
+    let parsed;
     try {
-      const json = JSON.parse(out);
-      if (!Number.isFinite(Number(json.tempoTotalEntregaHoras))) {
-        const viagensCalc = Array.isArray(json?.viagens) ? json.viagens : [];
-        const totalTempo = viagensCalc.reduce((acc, viagem) => {
-          const tempo = Number(viagem?.tempoHoras ?? viagem?.bateria?.tempoTotalHoras);
-          return acc + (Number.isFinite(tempo) ? tempo : 0);
-        }, 0);
-        if (viagensCalc.length && Number.isFinite(totalTempo)) {
-          json.tempoTotalEntregaHoras = totalTempo;
-        }
-      }
-      res.json(json);
-    } catch (e) {
-      console.error('Saida invalida do Java:', out, e);
-      res.status(500).json({ erro: 'Saida invalida do Java', raw: out });
+      parsed = JSON.parse(raw);
+    } catch (parseError) {
+      parsed = raw;
     }
-  });
+
+    if (!response.ok) {
+      console.warn(`API Java retornou status ${response.status}; usando stub.`);
+      return res.json({ ...buildStubResponse(payload), origem: 'stub-fallback', erroJava: parsed });
+    }
+
+    return res.status(response.status).json(parsed);
+  } catch (error) {
+    console.error('Erro ao chamar API Java, usando stub:', error);
+    return res.json({ ...buildStubResponse(payload), origem: 'stub-fallback', erroJava: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API Node em http://localhost:${PORT}`));
-
-
-
-
-
-
-
-
-
 
 

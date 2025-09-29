@@ -1,0 +1,47 @@
+package com.drone.simulador.api;
+
+import java.util.concurrent.CountDownLatch;
+
+public final class ApiLauncher {
+    private ApiLauncher() {
+    }
+
+    public static void main(String[] args) throws Exception {
+        int port = resolvePort(args);
+        ApiServer server = new ApiServer(port);
+        server.start();
+        System.out.printf("API de planejamento ativa em http://localhost:%d%n", port);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            server.stop(0);
+            latch.countDown();
+        }));
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            server.stop(0);
+        }
+    }
+
+    private static int resolvePort(String[] args) {
+        if (args != null && args.length > 0) {
+            try {
+                return Integer.parseInt(args[0]);
+            } catch (NumberFormatException ignored) {
+                System.err.printf("Porta invalida '%s', utilizando padrao.%n", args[0]);
+            }
+        }
+        String env = System.getenv("API_PORT");
+        if (env != null && !env.isBlank()) {
+            try {
+                return Integer.parseInt(env.trim());
+            } catch (NumberFormatException ignored) {
+                System.err.printf("Variavel API_PORT invalida '%s', utilizando padrao.%n", env);
+            }
+        }
+        return 8080;
+    }
+}
