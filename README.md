@@ -64,7 +64,7 @@ drone_simulador/
 
 ### 2️⃣ Clonar o repositório
 ```bash
-git clone https://github.com/seu-user/drone_simulador.git
+git clone https://github.com/einfolke/drone_simulador
 cd drone_simulador
 ```
 
@@ -122,8 +122,3 @@ mvn test
 
 ## 📜 Licença
 Este projeto é distribuído sob a licença MIT – veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
-## 💡 Próximos Passos
-- Implementar cálculo de rotas com algoritmos de otimização (ex.: Dijkstra ou A*).  
-- Criar painel em tempo real com WebSockets.  
-- Deploy em nuvem (Docker + Render/Heroku).
