@@ -1,5 +1,8 @@
 
 # 🛸 Drone Simulator
+
+<img src= "img/front-react.gif">
+
 Simulador de entregas por drones em áreas urbanas, com gerenciamento de rotas, capacidade, distância e prioridade de entrega.
 
 ## 📋 Descrição
